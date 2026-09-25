@@ -1,3 +1,5 @@
+/confs/php/local-ca/*
+!/confs/php/local-ca/.gitkeep
 # Secrets and machine-specific settings
 .env
 .env.*

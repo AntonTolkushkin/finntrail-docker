@@ -112,7 +112,7 @@ dump_file="$snapshot_dir/database.sql.gz"
 snapshot_complete=0
 
 cleanup() {
-    status=$?
+    status=${1:-$?}
     trap - EXIT HUP INT TERM
     if ((status != 0 || snapshot_complete == 0)); then
         case "$snapshot_dir" in
@@ -121,7 +121,10 @@ cleanup() {
     fi
     exit "$status"
 }
-trap cleanup EXIT HUP INT TERM
+trap 'cleanup $?' EXIT
+trap 'cleanup 129' HUP
+trap 'cleanup 130' INT
+trap 'cleanup 143' TERM
 
 mkdir -p "$snapshot_dir"
 cd "$PROJECT_ROOT"
@@ -173,7 +176,7 @@ echo "Creating production SQL snapshot: $dump_file"
 
     echo "Neither mysqldump nor mariadb-dump exists in the mysql container." >&2
     exit 1
-' | gzip -1 > "$dump_file"
+' </dev/null | gzip -1 > "$dump_file"
 
 gzip -t "$dump_file"
 

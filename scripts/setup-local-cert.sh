@@ -6,12 +6,61 @@ DOMAIN=${LOCAL_DOMAIN:-finntrail.local}
 CERT_DIR="$ROOT_DIR/confs/nginx/certs/$DOMAIN"
 CERT_FILE="$CERT_DIR/fullchain.pem"
 KEY_FILE="$CERT_DIR/privkey.pem"
+PHP_CA_DIR="$ROOT_DIR/confs/php/local-ca"
+PHP_CA_FILE="$PHP_CA_DIR/rootCA.pem"
+
+prepare_php_ca() {
+    source_ca=$1
+
+    if ! command -v openssl >/dev/null 2>&1; then
+        echo "openssl is required to prepare the PHP trust store." >&2
+        exit 1
+    fi
+    if [ ! -s "$source_ca" ]; then
+        echo "mkcert root CA was not found: $source_ca" >&2
+        exit 1
+    fi
+
+    mkdir -p "$PHP_CA_DIR"
+    if [ "$source_ca" != "$PHP_CA_FILE" ]; then
+        cp -f "$source_ca" "$PHP_CA_FILE"
+    fi
+
+    for old_hash in "$PHP_CA_DIR"/*.0; do
+        if [ -e "$old_hash" ] || [ -L "$old_hash" ]; then
+            rm -f -- "$old_hash"
+        fi
+    done
+
+    ca_hash=$(openssl x509 -in "$PHP_CA_FILE" -noout -hash)
+    case "$ca_hash" in
+        ""|*[!0-9A-Fa-f]*)
+            echo "Could not calculate the mkcert CA hash." >&2
+            exit 1
+            ;;
+    esac
+
+    ln -sfn rootCA.pem "$PHP_CA_DIR/$ca_hash.0"
+    chmod 0644 "$PHP_CA_FILE"
+}
 
 is_wsl() {
     [ -r /proc/sys/kernel/osrelease ] && grep -qi microsoft /proc/sys/kernel/osrelease
 }
 
 if is_wsl; then
+    if [ -s "$CERT_FILE" ] &&
+        [ -s "$KEY_FILE" ] &&
+        [ -s "$PHP_CA_FILE" ] &&
+        openssl verify \
+            -CAfile "$PHP_CA_FILE" \
+            "$CERT_FILE" >/dev/null 2>&1; then
+        chmod 0644 "$CERT_FILE" "$KEY_FILE"
+        prepare_php_ca "$PHP_CA_FILE"
+        echo "Existing valid WSL certificate and CA were reused."
+        exit 0
+    fi
+
     if ! command -v powershell.exe >/dev/null 2>&1 || ! command -v wslpath >/dev/null 2>&1; then
         echo "Windows PowerShell and wslpath are required in WSL." >&2
         exit 1
@@ -34,6 +83,7 @@ if is_wsl; then
 
     # The Nginx image runs as a non-root user and must be able to read the key.
     chmod 0644 "$CERT_FILE" "$KEY_FILE"
+    prepare_php_ca "$PHP_CA_FILE"
     echo "Local certificate configured for WSL + Windows."
     exit 0
 fi
@@ -72,6 +122,9 @@ case "$OS" in
 esac
 
 "$MKCERT" -install
+
+MKCERT_CA_ROOT=$("$MKCERT" -CAROOT)
+prepare_php_ca "$MKCERT_CA_ROOT/rootCA.pem"
 
 mkdir -p "$CERT_DIR"
 TEMP_DIR=$(mktemp -d)

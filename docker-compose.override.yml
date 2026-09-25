@@ -2,10 +2,32 @@ services:
   php:
     environment:
       BITRIX_ENV_TYPE: local
+      SSL_CERT_DIR: /etc/ssl/certs:/etc/ssl/finntrail-local-ca
+    volumes:
+      - ./confs/php/local-ca:/etc/ssl/finntrail-local-ca:ro
+      - ./confs/msmtp/local.msmtprc:/opt/msmtp/.msmtprc:ro
+    depends_on:
+      mailpit:
+        condition: service_started
 
   cron:
     environment:
       BITRIX_ENV_TYPE: local
+      SSL_CERT_DIR: /etc/ssl/certs:/etc/ssl/finntrail-local-ca
+    volumes:
+      - ./confs/php/local-ca:/etc/ssl/finntrail-local-ca:ro
+      - ./confs/msmtp/local.msmtprc:/opt/msmtp/.msmtprc:ro
+    depends_on:
+      mailpit:
+        condition: service_started
+
+  mailpit:
+    image: axllent/mailpit:v1.30.7
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8025:8025"
+    networks:
+      - backend
 
   nginx:
     ports: !override
@@ -14,3 +36,7 @@ services:
     volumes:
       - ./confs/nginx/sites/finntrail.local.conf:/etc/nginx/conf.d/default.conf:ro
       - ./confs/nginx/ssl/finntrail.local.conf:/etc/nginx/ssl/ssl.conf:ro
+    networks:
+      backend:
+        aliases:
+          - finntrail.local

@@ -21,6 +21,7 @@ Production и development запускаются из разных клонов 
 | `redis` | `redis:8.2.9-alpine` | сессии и кеш |
 | `composer` | PHP-образ, профиль `tools` | одноразовые команды Composer |
 | `node` | `node:22.13.1-alpine`, профиль `tools` | одноразовые команды npm |
+| `mailpit` | `axllent/mailpit:v1.30.7` | локальный перехват писем без внешней отправки |
 
 Имя Compose-сервиса оставлено `mysql`, но внутри работает Percona Server 8.0.
 Для БД используются отдельные volumes `percona_data` и `percona_log_data`.
@@ -32,7 +33,7 @@ Production и development запускаются из разных клонов 
 # Local: WSL, Linux и macOS
 
 Требования: Docker Compose 2.24.4+, минимум 4 GB RAM, свободные локальные порты
-`80/443`.
+`80/443/8025`.
 
 ```bash
 ./scripts/init-env.sh local
@@ -42,6 +43,12 @@ Production и development запускаются из разных клонов 
 В WSL скрипт запросит UAC Windows, установит локальный CA `mkcert`, создаст
 сертификат и добавит `finntrail.local` в Windows hosts. На macOS используется
 Homebrew/Keychain. После запуска откройте <https://finntrail.local>.
+
+Локальные письма не отправляются во внешнюю сеть: `msmtp` передаёт их в
+Mailpit. Интерфейс писем доступен на <http://127.0.0.1:8025/>.
+
+Корневой сертификат `mkcert` автоматически копируется в отдельное локальное
+хранилище доверия PHP. Сертификаты конкретного компьютера не добавляются в Git.
 
 Windows PowerShell:
 

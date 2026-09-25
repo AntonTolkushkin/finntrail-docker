@@ -153,6 +153,21 @@ if (-not (Test-Path -LiteralPath $CertificateFile -PathType Leaf) -or
     throw "Certificate files were not copied to the project directory: $CertificateDirectory"
 }
 
+$CaRoot = ((& $mkcert -CAROOT) | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($CaRoot)) {
+    throw "mkcert failed to return its local CA directory."
+}
+
+$RootCaFile = Join-Path $CaRoot "rootCA.pem"
+if (-not (Test-Path -LiteralPath $RootCaFile -PathType Leaf)) {
+    throw "mkcert root CA was not found: $RootCaFile"
+}
+
+$PhpCaDirectory = Join-Path $ProjectRoot "confs\php\local-ca"
+$PhpCaFile = Join-Path $PhpCaDirectory "rootCA.pem"
+New-Item -ItemType Directory -Force -Path $PhpCaDirectory | Out-Null
+Copy-Item -LiteralPath $RootCaFile -Destination $PhpCaFile -Force
+
 Write-Host "Local HTTPS certificate is ready:"
 Write-Host "  $CertificateFile"
 Write-Host "  $PrivateKeyFile"

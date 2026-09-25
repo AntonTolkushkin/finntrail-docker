@@ -154,6 +154,8 @@ SSH_OPTIONS=(
     -o PubkeyAuthentication=no
     -o PreferredAuthentications=keyboard-interactive,password
     -o NumberOfPasswordPrompts=3
+    -o ServerAliveInterval=15
+    -o ServerAliveCountMax=20
     -o ControlMaster=auto
     -o ControlPersist=10m
     -o "ControlPath=$control_socket"
@@ -181,7 +183,7 @@ snapshot_id=${remote_snapshot##*/}
 local_snapshot="$local_backups/local-sync/$snapshot_id"
 mkdir -p "$local_snapshot" "$LOCAL_SITE_ROOT"
 
-RSYNC_RSH="ssh -p $REMOTE_PORT -o UserKnownHostsFile=$known_hosts -o StrictHostKeyChecking=yes -o PubkeyAuthentication=no -o PreferredAuthentications=keyboard-interactive,password -o ControlMaster=no -o ControlPath=$control_socket"
+RSYNC_RSH="ssh -p $REMOTE_PORT -o UserKnownHostsFile=$known_hosts -o StrictHostKeyChecking=yes -o PubkeyAuthentication=no -o PreferredAuthentications=keyboard-interactive,password -o ServerAliveInterval=15 -o ServerAliveCountMax=20 -o ControlMaster=no -o ControlPath=$control_socket"
 
 progress_option=--progress
 if rsync --help 2>&1 | grep -q -- '--info'; then
@@ -255,6 +257,14 @@ if [[ ! -e "$constants_file" && -f "$constants_example" ]]; then
     echo "Created local constants.php from constants.example.php."
 fi
 
+echo "Applying local development permissions..."
+find "$LOCAL_SITE_ROOT" -xdev \
+    -path "$LOCAL_SITE_ROOT/.git" -prune -o \
+    -type d -exec chmod a+rwx {} +
+find "$LOCAL_SITE_ROOT" -xdev \
+    -path "$LOCAL_SITE_ROOT/.git" -prune -o \
+    -type f -exec chmod a+rw {} +
+
 mysql_database=$(env_value MYSQL_DATABASE)
 mysql_user=$(env_value MYSQL_USER)
 mysql_password=$(env_value MYSQL_PASSWORD)
@@ -326,10 +336,6 @@ for cache_dir in \
     chmod 0777 "$cache_dir"
 done
 
-if [[ -d "$LOCAL_SITE_ROOT/upload" ]]; then
-    find "$LOCAL_SITE_ROOT/upload" -type d -exec chmod a+rwx {} +
-fi
-
 "$ROOT_DIR/scripts/compose.sh" exec -T redis sh -ec \
     'redis-cli --no-auth-warning -a "$REDIS_PASSWORD" FLUSHALL' >/dev/null
 
@@ -340,7 +346,7 @@ if [[ -x "$ROOT_DIR/scripts/hooks/post-sync-local.sh" ]]; then
 fi
 
 echo "Starting the local site (cron remains stopped intentionally)..."
-"$ROOT_DIR/scripts/compose.sh" up -d mysql redis php nginx
+"$ROOT_DIR/scripts/compose.sh" up -d mysql redis mailpit php nginx
 "$ROOT_DIR/scripts/compose.sh" stop cron >/dev/null 2>&1 || true
 "$ROOT_DIR/scripts/compose.sh" ps
 
@@ -355,6 +361,7 @@ rm -rf -- "$work_dir"
 echo
 echo "Synchronization completed on $platform."
 echo "Local URL: https://finntrail.local"
+echo "Mailpit URL: http://127.0.0.1:8025"
 echo "SQL snapshot: $local_snapshot/database.sql.gz"
 if ((WITH_UPLOAD == 0)); then
     echo "upload/ was left unchanged. Use --with-upload for the full media sync."

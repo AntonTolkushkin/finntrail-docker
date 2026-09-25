@@ -1,0 +1,11 @@
+defaults
+auth off
+tls off
+logfile /proc/self/fd/2
+
+account default
+host mailpit
+port 1025
+protocol smtp
+from noreply@finntrail.local
+aliases /etc/aliases
