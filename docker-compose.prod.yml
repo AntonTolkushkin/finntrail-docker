@@ -1,0 +1,63 @@
+services:
+  php:
+    extra_hosts:
+      - "finntrail.ru:217.114.11.188"
+    environment:
+      BITRIX_ENV_TYPE: ${BITRIX_ENV_TYPE:-production}
+      PHP_FPM_MAX_CHILDREN: ${PHP_FPM_MAX_CHILDREN:-60}
+      PHP_FPM_START_SERVERS: ${PHP_FPM_START_SERVERS:-12}
+      PHP_FPM_MIN_SPARE_SERVERS: ${PHP_FPM_MIN_SPARE_SERVERS:-8}
+      PHP_FPM_MAX_SPARE_SERVERS: ${PHP_FPM_MAX_SPARE_SERVERS:-24}
+      PHP_FPM_MAX_REQUESTS: ${PHP_FPM_MAX_REQUESTS:-1000}
+      PHP_MEMORY_LIMIT: ${PHP_MEMORY_LIMIT:-1024M}
+    volumes:
+      - /srv/bitrix-prod/secrets/msmtprc:/etc/msmtprc:ro
+      - /srv/bitrix-prod/secrets/msmtp-password:/run/secrets/msmtp-password:ro
+      - type: bind
+        source: ./confs/php/project-production.ini
+        target: /usr/local/etc/php/conf.d/zz-project.ini
+        read_only: true
+      - type: bind
+        source: ./confs/php/fpm-production.conf
+        target: /usr/local/etc/php-fpm.d/zz-project.conf
+        read_only: true
+
+  cron:
+    command: ["/opt/project-cron/cron-entrypoint"]
+    extra_hosts:
+      - "finntrail.ru:217.114.11.188"
+    environment:
+      BITRIX_ENV_TYPE: ${BITRIX_ENV_TYPE:-production}
+      PHP_FPM_MAX_CHILDREN: ${PHP_FPM_MAX_CHILDREN:-60}
+      PHP_FPM_START_SERVERS: ${PHP_FPM_START_SERVERS:-12}
+      PHP_FPM_MIN_SPARE_SERVERS: ${PHP_FPM_MIN_SPARE_SERVERS:-8}
+      PHP_FPM_MAX_SPARE_SERVERS: ${PHP_FPM_MAX_SPARE_SERVERS:-24}
+      PHP_FPM_MAX_REQUESTS: ${PHP_FPM_MAX_REQUESTS:-1000}
+      PHP_MEMORY_LIMIT: ${PHP_MEMORY_LIMIT:-1024M}
+    volumes:
+      - /srv/bitrix-prod/secrets/msmtprc:/etc/msmtprc:ro
+      - /srv/bitrix-prod/secrets/msmtp-password:/run/secrets/msmtp-password:ro
+      - type: bind
+        source: ./confs/php/project-production.ini
+        target: /usr/local/etc/php/conf.d/zz-project.ini
+        read_only: true
+      - type: bind
+        source: ./confs/php/fpm-production.conf
+        target: /usr/local/etc/php-fpm.d/zz-project.conf
+        read_only: true
+      - type: bind
+        source: ./confs/cron
+        target: /opt/project-cron
+        read_only: true
+
+  nginx:
+    volumes:
+      - ./confs/nginx/sites/finntrail.ru.conf:/etc/nginx/conf.d/default.conf:ro
+
+volumes:
+  percona_data:
+    external: true
+    name: ${PERCONA_DATA_VOLUME:-bitrix-prod_percona_data}
+  percona_log_data:
+    external: true
+    name: ${PERCONA_LOG_VOLUME:-bitrix-prod_percona_log_data}

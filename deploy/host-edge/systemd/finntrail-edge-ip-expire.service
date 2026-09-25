@@ -1,0 +1,7 @@
+[Unit]
+Description=Expire temporary Finntrail UFW IP blocks
+After=ufw.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/edge-ip expire

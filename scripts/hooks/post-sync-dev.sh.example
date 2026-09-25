@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+set -eu
+
+# Copy this file to post-sync-dev.sh (ignored by Git) and add project-specific
+# sanitization: development domains, SMTP sink, disabled payment gateways,
+# CRM/webhook tokens and any other integrations that must never target prod.
+echo "Add project-specific development sanitization here." >&2

@@ -1,0 +1,114 @@
+#!/bin/sh
+set -eu
+
+PROFILE_ID=${1:-}
+SITE_ROOT=${SITE_ROOT:-/opt/www/public_html}
+PHP_BIN=${ACRIT_EXPORT_PHP_BIN:-/usr/local/bin/php}
+EXPORT_SCRIPT="$SITE_ROOT/bitrix/modules/acrit.exportproplus/cli/export.php"
+LOG_DIR="$SITE_ROOT/upload/acrit.exportproplus/log"
+
+case "$PROFILE_ID" in
+    ''|*[!0-9]*)
+        echo "Usage: $0 PROFILE_ID" >&2
+        exit 64
+        ;;
+esac
+
+if [ "$PROFILE_ID" -lt 1 ]; then
+    echo "Acrit cron: PROFILE_ID must be greater than zero." >&2
+    exit 64
+fi
+
+LOG_FILE="$LOG_DIR/cron-profile-$PROFILE_ID.log"
+LOCK_DIR="/tmp/acrit-exportproplus-profile-$PROFILE_ID.lock"
+
+log_info() {
+    printf '%s %s\n' \
+        "$(date '+%Y-%m-%dT%H:%M:%S%z')" \
+        "$*" \
+        >>/proc/1/fd/1
+}
+
+log_error() {
+    printf '%s %s\n' \
+        "$(date '+%Y-%m-%dT%H:%M:%S%z')" \
+        "$*" \
+        >>/proc/1/fd/2
+}
+
+if [ ! -f "$SITE_ROOT/bitrix/.settings.php" ]; then
+    log_error "Acrit cron: Bitrix is not installed at $SITE_ROOT."
+    exit 1
+fi
+
+if [ ! -x "$PHP_BIN" ]; then
+    log_error "Acrit cron: PHP binary is not executable: $PHP_BIN"
+    exit 1
+fi
+
+if [ ! -f "$EXPORT_SCRIPT" ]; then
+    log_error "Acrit cron: export script was not found: $EXPORT_SCRIPT"
+    exit 1
+fi
+
+if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    RUNNING_PID=$(sed -n '1p' "$LOCK_DIR/pid" 2>/dev/null || true)
+
+    case "$RUNNING_PID" in
+        ''|*[!0-9]*)
+            RUNNING_PID=''
+            ;;
+    esac
+
+    if [ -n "$RUNNING_PID" ] && kill -0 "$RUNNING_PID" 2>/dev/null; then
+        log_info "Acrit cron: profile $PROFILE_ID is already running; duplicate start skipped."
+        exit 0
+    fi
+
+    rm -f "$LOCK_DIR/pid" 2>/dev/null || true
+    rmdir "$LOCK_DIR" 2>/dev/null || {
+        log_error "Acrit cron: stale lock cannot be removed: $LOCK_DIR"
+        exit 1
+    }
+
+    if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+        log_info "Acrit cron: profile $PROFILE_ID lock is busy; start skipped."
+        exit 0
+    fi
+fi
+
+printf '%s\n' "$$" >"$LOCK_DIR/pid"
+
+cleanup() {
+    rm -f "$LOCK_DIR/pid" 2>/dev/null || true
+    rmdir "$LOCK_DIR" 2>/dev/null || true
+}
+trap cleanup EXIT HUP INT TERM
+
+if [ ! -d "$LOG_DIR" ]; then
+    su -s /bin/sh bitrix -c "mkdir -p '$LOG_DIR'"
+fi
+
+if ! su -s /bin/sh bitrix -c "test -w '$LOG_DIR'"; then
+    log_error "Acrit cron: directory is not writable by bitrix: $LOG_DIR"
+    exit 1
+fi
+
+log_info "Acrit cron: starting profile $PROFILE_ID."
+
+if su -s /bin/sh bitrix -c \
+    "cd '$SITE_ROOT' && exec nice -n 10 '$PHP_BIN' \
+        -d short_open_tag=on \
+        -d display_errors=off \
+        -d log_errors=on \
+        -d error_reporting=22519 \
+        -d max_execution_time=0 \
+        -f '$EXPORT_SCRIPT' \
+        profile='$PROFILE_ID' auto=Y \
+        >>'$LOG_FILE' 2>&1"; then
+    log_info "Acrit cron: profile $PROFILE_ID finished successfully."
+else
+    EXIT_CODE=$?
+    log_error "Acrit cron: profile $PROFILE_ID failed with exit code $EXIT_CODE."
+    exit "$EXIT_CODE"
+fi

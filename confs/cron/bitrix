@@ -1,0 +1,22 @@
+#!/bin/sh
+set -u
+
+SITE_ROOT=${SITE_ROOT:-/opt/www/public_html}
+CRON_SCRIPT="$SITE_ROOT/bitrix/modules/main/tools/cron_events.php"
+
+if [ ! -f "$SITE_ROOT/bitrix/.settings.php" ]; then
+    exit 0
+fi
+
+# Не запускаем агенты во время установки или обновления Bitrix.
+if [ -f "$SITE_ROOT/install.config" ] || \
+   [ -f "$SITE_ROOT/license.php" ] || \
+   [ -f "$SITE_ROOT/readme.php" ]; then
+    exit 0
+fi
+
+if [ -f "$CRON_SCRIPT" ]; then
+    su -s /bin/sh bitrix -c \
+        "exec php -f '$CRON_SCRIPT'" \
+        >>/proc/1/fd/1 2>>/proc/1/fd/2
+fi

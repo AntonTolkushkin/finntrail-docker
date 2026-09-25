@@ -1,0 +1,25 @@
+SHELL=/bin/sh
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Keep the standard Alpine periodic jobs. The existing Bitrix agent runner is
+# mounted at /etc/periodic/1min/bitrix and is therefore executed by the first
+# line below.
+*       *       *       *       *       run-parts /etc/periodic/1min
+*/15    *       *       *       *       run-parts /etc/periodic/15min
+0       *       *       *       *       run-parts /etc/periodic/hourly
+0       2       *       *       *       run-parts /etc/periodic/daily
+0       3       *       *       6       run-parts /etc/periodic/weekly
+0       5       1       *       *       run-parts /etc/periodic/monthly
+
+# Acrit ExportProPlus examples. Remove the leading # and choose a schedule.
+# Do not add a user column: this is root's BusyBox crontab.
+#
+# Profile 1: every hour at minute 7.
+# 7       *       *       *       *       /opt/project-cron/jobs/acrit-export 1
+#
+# Profile 2: every 30 minutes.
+# */30    *       *       *       *       /opt/project-cron/jobs/acrit-export 2
+#
+# Profile 3: every day at 02:25.
+# 25      2       *       *       *       /opt/project-cron/jobs/acrit-export 3
+0 14 * * * /opt/project-cron/jobs/acrit-export 1

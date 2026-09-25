@@ -1,0 +1,23 @@
+#!/bin/sh
+set -eu
+
+SITE_ROOT=${SITE_ROOT:-/opt/www/public_html}
+PHP_BIN=${ACRIT_EXPORT_PHP_BIN:-/usr/local/bin/php}
+SCRIPT="$SITE_ROOT/local/cron/example.php"
+LOG_FILE="$SITE_ROOT/local/logs/example-cron.log"
+LOG_DIR=$(dirname "$LOG_FILE")
+
+if [ ! -f "$SCRIPT" ]; then
+    printf 'Cron script was not found: %s\n' "$SCRIPT" >&2
+    exit 1
+fi
+
+su -s /bin/sh bitrix -c "mkdir -p '$LOG_DIR'"
+
+su -s /bin/sh bitrix -c \
+    "cd '$SITE_ROOT' && exec '$PHP_BIN' \
+        -d display_errors=off \
+        -d log_errors=on \
+        -d max_execution_time=0 \
+        -f '$SCRIPT' \
+        >>'$LOG_FILE' 2>&1"

@@ -1,0 +1,33 @@
+[mysqld]
+character-set-server = utf8mb4
+collation-server = utf8mb4_unicode_ci
+default-storage-engine = InnoDB
+
+innodb-file-per-table = ON
+innodb-default-row-format = DYNAMIC
+innodb-flush-method = O_DIRECT
+innodb-strict-mode = OFF
+
+table-open-cache = 8192
+thread-cache-size = 128
+key-buffer-size = 32M
+
+join-buffer-size = 1M
+sort-buffer-size = 1M
+read-buffer-size = 1M
+read-rnd-buffer-size = 1M
+
+performance-schema = OFF
+slow-query-log = OFF
+sql-mode =
+
+skip-name-resolve = ON
+mysqlx = 0
+
+[client]
+default-character-set = utf8mb4
+
+[mysqldump]
+quick
+max-allowed-packet = 256M
+default-character-set = utf8mb4

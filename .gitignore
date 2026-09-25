@@ -1,0 +1,33 @@
+# Secrets and machine-specific settings
+.env
+.env.*
+!.env.example
+!.env.production.example
+!.env.development.example
+
+# Site data is deployed separately from infrastructure code
+/www/*
+!/www/public_html/
+/www/public_html/*
+!/www/public_html/.gitkeep
+
+# Backups must never be committed
+/backups/*
+!/backups/.gitkeep
+*.sql
+*.sql.gz
+*.tar.gz
+*.zip
+
+# Local tooling
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+/scripts/hooks/post-sync-dev.sh
+/scripts/hooks/post-sync-local.sh
+
+# Local and production private keys are provisioned outside Git.
+/confs/nginx/certs/*
+!/confs/nginx/certs/.gitkeep
+/confs/nginx/auth/*

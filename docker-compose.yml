@@ -1,0 +1,279 @@
+name: ${COMPOSE_PROJECT_NAME:-bitrix}
+
+x-service-defaults: &service-defaults
+  restart: unless-stopped
+  init: true
+  security_opt:
+    - no-new-privileges:true
+  logging:
+    driver: json-file
+    options:
+      max-size: ${LOG_MAX_SIZE:-10m}
+      max-file: "${LOG_MAX_FILE:-5}"
+  networks:
+    - backend
+
+x-php-volumes: &php-volumes
+  - type: bind
+    source: ${WWW_PATH:-./www}
+    target: /opt/www
+  - type: bind
+    source: ./confs/php84/etc
+    target: /usr/local/etc
+    read_only: true
+  - type: bind
+    source: ./confs/cron/bitrix
+    target: /etc/periodic/1min/bitrix
+    read_only: true
+  - bxtemp_data:/opt/.bx_temp
+  - msmtp_data:/opt/msmtp
+  - browscap_data:/opt/browscap
+  - geoip2_data:/opt/geoip2
+
+services:
+  mysql:
+    <<: *service-defaults
+    image: ${PERCONA_IMAGE:-quay.io/bitrix24/percona-server:8.0.46-v1-rhel}
+    environment:
+      TZ: ${TZ:-Europe/Moscow}
+      MYSQL_DATABASE: ${MYSQL_DATABASE:-bitrix}
+      MYSQL_USER: ${MYSQL_USER:-bitrix}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD:?MYSQL_PASSWORD is required; run the init script}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required; run the init script}
+    command:
+      - --innodb-buffer-pool-size=${MYSQL_INNODB_BUFFER_POOL_SIZE:-512M}
+      - --max-connections=${MYSQL_MAX_CONNECTIONS:-100}
+      - --max-allowed-packet=${MYSQL_MAX_ALLOWED_PACKET:-256M}
+      - --tmp-table-size=${MYSQL_TMP_TABLE_SIZE:-64M}
+      - --max-heap-table-size=${MYSQL_MAX_HEAP_TABLE_SIZE:-64M}
+      - --innodb-flush-log-at-trx-commit=${MYSQL_INNODB_FLUSH_LOG_AT_TRX_COMMIT:-2}
+      - --transaction-isolation=READ-COMMITTED
+      - --skip-log-bin
+    volumes:
+      # Percona uses dedicated volumes. Existing MariaDB volumes remain intact
+      # for rollback and must never be mounted by MySQL 8.
+      - percona_data:/var/lib/mysql
+      - percona_log_data:/var/log/mysql
+      - type: bind
+        source: ./confs/percona/zz-bitrix.cnf
+        target: /etc/my.cnf.d/zz-bitrix.cnf
+        read_only: true
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - DAC_OVERRIDE
+      - FOWNER
+      - SETGID
+      - SETUID
+      - SYS_NICE
+    tmpfs:
+      - /tmp:noexec,nodev,nosuid
+      - /var/tmp:noexec,nodev,nosuid
+      - /dev/shm:noexec,nodev,nosuid
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+      start_period: 45s
+    stop_grace_period: 1m
+    ulimits:
+      nofile:
+        soft: 65535
+        hard: 65535
+  redis:
+    <<: *service-defaults
+    image: ${REDIS_IMAGE:-redis:8.2.9-alpine}
+    environment:
+      TZ: ${TZ:-Europe/Moscow}
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required; run the init script}
+    command:
+      - redis-server
+      - --appendonly
+      - "yes"
+      - --save
+      - "60"
+      - "1000"
+      - --requirepass
+      - "${REDIS_PASSWORD:?REDIS_PASSWORD must be set in .env}"
+      - --maxmemory
+      - "${REDIS_MAXMEMORY:-0}"
+      - --maxmemory-policy
+      - "${REDIS_MAXMEMORY_POLICY:-noeviction}"
+    volumes:
+      - redis_data:/data
+    cap_drop:
+      - ALL
+    cap_add:
+      - CHOWN
+      - SETGID
+      - SETUID
+    tmpfs:
+      - /tmp:noexec,nodev,nosuid
+      - /var/tmp:noexec,nodev,nosuid
+      - /dev/shm:noexec,nodev,nosuid
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli --no-auth-warning -a \"$${REDIS_PASSWORD}\" ping | grep -q PONG"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  php:
+    <<: *service-defaults
+    image: ${PHP_IMAGE:-quay.io/bitrix24/php:8.4.25-fpm-v1-alpine}
+    environment:
+      TZ: ${TZ:-Europe/Moscow}
+      BITRIX_VA_VER: ${BITRIX_VA_VER:-9.0.10}
+      BITRIX_ENV_TYPE: ${BITRIX_ENV_TYPE:-general}
+      SITE_ROOT: ${SITE_ROOT:-/opt/www/public_html}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required; run the init script}
+    volumes: *php-volumes
+    cap_drop:
+      - ALL
+    tmpfs:
+      - /tmp:noexec,nodev,nosuid
+      - /var/tmp:noexec,nodev,nosuid
+      - /dev/shm:noexec,nodev,nosuid
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - php
+        - -r
+        - '$$socket = @fsockopen("127.0.0.1", 9000, $$errno, $$errstr, 2); exit(is_resource($$socket) ? 0 : 1);'
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    stop_grace_period: 30s
+
+  cron:
+    <<: *service-defaults
+    image: ${PHP_IMAGE:-quay.io/bitrix24/php:8.4.25-fpm-v1-alpine}
+    command: ["crond", "-f", "-d", "8"]
+    user: root
+    environment:
+      TZ: ${TZ:-Europe/Moscow}
+      BITRIX_VA_VER: ${BITRIX_VA_VER:-9.0.10}
+      BITRIX_ENV_TYPE: ${BITRIX_ENV_TYPE:-general}
+      SITE_ROOT: ${SITE_ROOT:-/opt/www/public_html}
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required; run the init script}
+    volumes: *php-volumes
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETGID
+      - SETUID
+    tmpfs:
+      - /tmp:noexec,nodev,nosuid
+      - /var/tmp:noexec,nodev,nosuid
+      - /dev/shm:noexec,nodev,nosuid
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "pidof", "crond"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # One-shot build tools. They are not started by `up` because they use the
+  # `tools` profile. Use scripts/composer.sh and scripts/npm.sh.
+  composer:
+    image: ${PHP_IMAGE:-quay.io/bitrix24/php:8.4.25-fpm-v1-alpine}
+    profiles: ["tools"]
+    init: true
+    user: "${TOOLS_UID:-979}:${TOOLS_GID:-979}"
+    working_dir: ${SITE_ROOT:-/opt/www/public_html}
+    environment:
+      HOME: /tmp
+      COMPOSER_HOME: /tmp/composer
+    entrypoint: ["composer"]
+    volumes:
+      - type: bind
+        source: ${WWW_PATH:-./www}
+        target: /opt/www
+    networks:
+      - backend
+
+  node:
+    image: ${NODE_IMAGE:-node:22.13.1-alpine}
+    profiles: ["tools"]
+    init: true
+    user: "${TOOLS_UID:-979}:${TOOLS_GID:-979}"
+    working_dir: ${SITE_ROOT:-/opt/www/public_html}
+    environment:
+      HOME: /tmp
+      npm_config_cache: /tmp/npm-cache
+    entrypoint: ["npm"]
+    volumes:
+      - type: bind
+        source: ${WWW_PATH:-./www}
+        target: /opt/www
+    networks:
+      - backend
+
+  nginx:
+    <<: *service-defaults
+    image: ${NGINX_IMAGE:-quay.io/bitrix24/nginx:1.30.4-v1-alpine}
+    environment:
+      TZ: ${TZ:-Europe/Moscow}
+    ports:
+      - ${NGINX_BIND_ADDRESS:-127.0.0.1}:${HTTP_PORT:-8588}:80
+    volumes:
+      - type: bind
+        source: ./confs/nginx
+        target: /etc/nginx
+        read_only: true
+      - type: bind
+        source: ${WWW_PATH:-./www}
+        target: /opt/www
+        read_only: true
+      - bxtemp_data:/opt/.bx_temp
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_BIND_SERVICE
+    ulimits:
+      nofile:
+        soft: 131072
+        hard: 131072
+    tmpfs:
+      - /tmp:noexec,nodev,nosuid
+      - /var/tmp:noexec,nodev,nosuid
+      - /dev/shm:noexec,nodev,nosuid
+    depends_on:
+      php:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/docker-health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+networks:
+  backend:
+    driver: bridge
+
+volumes:
+  percona_data:
+  percona_log_data:
+  redis_data:
+  bxtemp_data:
+  msmtp_data:
+  browscap_data:
+  geoip2_data:

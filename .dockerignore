@@ -1,0 +1,10 @@
+.git
+.env
+www
+backups
+sources
+confs/nginx/certs
+*.sql
+*.sql.gz
+*.tar.gz
+*.zip

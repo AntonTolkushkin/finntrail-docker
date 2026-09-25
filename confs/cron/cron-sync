@@ -1,0 +1,25 @@
+#!/bin/sh
+set -eu
+
+SOURCE=/opt/project-cron/crontabs/root
+CRONTAB_DIR=/etc/crontabs
+TARGET="$CRONTAB_DIR/root"
+
+if [ ! -f "$SOURCE" ]; then
+    echo "Cron config: source file was not found: $SOURCE" >&2
+    exit 1
+fi
+
+if [ -f "$TARGET" ] && cmp -s "$SOURCE" "$TARGET"; then
+    exit 0
+fi
+
+# BusyBox crond only accepts a root-owned file for root. Installing it through
+# crontab creates the correct owner/mode and notifies crond about the update.
+if crontab -c "$CRONTAB_DIR" -u root "$SOURCE"; then
+    printf '%s Cron config: root crontab updated.\n' \
+        "$(date '+%Y-%m-%dT%H:%M:%S%z')"
+else
+    echo "Cron config: new root crontab was rejected." >&2
+    exit 1
+fi

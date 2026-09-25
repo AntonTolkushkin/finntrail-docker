@@ -1,0 +1,18 @@
+-- Known schema differences in redfinntrail after importing it into Percona 8.
+-- The database is replaced on every synchronization, so these statements do
+-- not need to preserve a previous destination schema.
+
+SET SESSION sql_mode = 'STRICT_ALL_TABLES,NO_ENGINE_SUBSTITUTION';
+
+ALTER TABLE `b_sale_order`
+    CHANGE `SUM_PAID` `SUM_PAID` decimal(26,8) NOT NULL DEFAULT '0.00000000';
+
+ALTER TABLE `b_sale_viewed_product`
+    CHANGE `PRICE` `PRICE` decimal(26,8) NOT NULL DEFAULT '0.00000000';
+
+ALTER TABLE `b_iblock_element_property`
+    CHANGE `ID` `ID` bigint NOT NULL auto_increment;
+
+ALTER TABLE `b_mail_domain_email`
+    DROP PRIMARY KEY,
+    ADD PRIMARY KEY (`LOGIN`, `DOMAIN`);

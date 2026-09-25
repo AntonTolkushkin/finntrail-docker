@@ -1,0 +1,95 @@
+# This is an example for a Debian host Nginx without a control panel.
+# Install it in /etc/nginx/sites-available and enable it with one symlink in
+# /etc/nginx/sites-enabled. Do not leave another server block for these names.
+
+upstream finntrail_prod_docker {
+    server 127.0.0.1:8588;
+    keepalive 64;
+}
+
+upstream finntrail_dev_docker {
+    server 127.0.0.1:8589;
+    keepalive 16;
+}
+
+map $http_upgrade $finntrail_connection_upgrade {
+    default upgrade;
+    '' close;
+}
+
+server {
+    listen 217.114.11.188:80;
+    server_name finntrail.ru www.finntrail.ru;
+
+    include /etc/nginx/finntrail-rules/redirect-server.conf;
+    return 301 https://finntrail.ru$request_uri;
+}
+
+server {
+    listen 217.114.11.188:443 ssl http2;
+    server_name finntrail.ru www.finntrail.ru;
+
+    include /etc/nginx/finntrail-rules/redirect-server.conf;
+
+    # Replace these paths if the certificate is stored elsewhere.
+    ssl_certificate /var/www/httpd-cert/finn2026.crt;
+    ssl_certificate_key /var/www/httpd-cert/www_finntrail_ru.key;
+
+    client_max_body_size 1024m;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
+    location / {
+        proxy_pass http://finntrail_prod_docker;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $finntrail_connection_upgrade;
+        proxy_connect_timeout 10s;
+        proxy_send_timeout 330s;
+        proxy_read_timeout 330s;
+        proxy_buffering on;
+        proxy_buffers 16 32k;
+        proxy_buffer_size 32k;
+    }
+}
+
+server {
+    listen 217.114.11.188:80;
+    server_name dev.finntrail.ru dev1.finntrail.ru dev2.finntrail.ru;
+    return 301 https://$host$request_uri;
+}
+
+server {
+    listen 217.114.11.188:443 ssl http2;
+    server_name dev.finntrail.ru dev1.finntrail.ru dev2.finntrail.ru;
+
+    # Issue one SAN/wildcard certificate covering all three dev names and set
+    # the actual certificate paths here before nginx -t.
+    ssl_certificate /var/www/httpd-cert/REPLACE_WITH_DEV_CERT.crt;
+    ssl_certificate_key /var/www/httpd-cert/REPLACE_WITH_DEV_CERT.key;
+
+    client_max_body_size 1024m;
+    add_header Strict-Transport-Security "max-age=31536000" always;
+
+    location / {
+        proxy_pass http://finntrail_dev_docker;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $finntrail_connection_upgrade;
+        proxy_connect_timeout 10s;
+        proxy_send_timeout 330s;
+        proxy_read_timeout 330s;
+        proxy_buffering on;
+        proxy_buffers 8 32k;
+        proxy_buffer_size 32k;
+    }
+}

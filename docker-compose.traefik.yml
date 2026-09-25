@@ -1,0 +1,27 @@
+services:
+  nginx:
+    networks:
+      - backend
+      - traefik
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:?TRAEFIK_NETWORK is required when EDGE_MODE=traefik}
+      - traefik.http.routers.${TRAEFIK_ROUTER_NAME:-bitrix}-http.rule=${TRAEFIK_HOST_RULE:?TRAEFIK_HOST_RULE is required when EDGE_MODE=traefik}
+      - traefik.http.routers.${TRAEFIK_ROUTER_NAME:-bitrix}-http.entrypoints=${TRAEFIK_HTTP_ENTRYPOINT:-web}
+      - traefik.http.routers.${TRAEFIK_ROUTER_NAME:-bitrix}-http.middlewares=${TRAEFIK_ROUTER_NAME:-bitrix}-https-redirect
+      - traefik.http.middlewares.${TRAEFIK_ROUTER_NAME:-bitrix}-https-redirect.redirectscheme.scheme=https
+      - traefik.http.middlewares.${TRAEFIK_ROUTER_NAME:-bitrix}-https-redirect.redirectscheme.permanent=true
+      - traefik.http.routers.${TRAEFIK_ROUTER_NAME:-bitrix}.rule=${TRAEFIK_HOST_RULE:?TRAEFIK_HOST_RULE is required when EDGE_MODE=traefik}
+      - traefik.http.routers.${TRAEFIK_ROUTER_NAME:-bitrix}.entrypoints=${TRAEFIK_HTTPS_ENTRYPOINT:-websecure}
+      - traefik.http.routers.${TRAEFIK_ROUTER_NAME:-bitrix}.tls=true
+      - traefik.http.routers.${TRAEFIK_ROUTER_NAME:-bitrix}.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      - traefik.http.routers.${TRAEFIK_ROUTER_NAME:-bitrix}.service=${TRAEFIK_ROUTER_NAME:-bitrix}
+      - traefik.http.services.${TRAEFIK_ROUTER_NAME:-bitrix}.loadbalancer.server.port=80
+      - traefik.http.services.${TRAEFIK_ROUTER_NAME:-bitrix}.loadbalancer.healthcheck.path=/docker-health
+      - traefik.http.services.${TRAEFIK_ROUTER_NAME:-bitrix}.loadbalancer.healthcheck.interval=10s
+      - traefik.http.services.${TRAEFIK_ROUTER_NAME:-bitrix}.loadbalancer.healthcheck.timeout=3s
+
+networks:
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK:?TRAEFIK_NETWORK is required when EDGE_MODE=traefik}

@@ -1,0 +1,23 @@
+#!/bin/sh
+set -u
+
+SYNC_SCRIPT=/opt/project-cron/cron-sync
+
+if ! "$SYNC_SCRIPT"; then
+    echo "Cron config: initial synchronization failed; keeping the last valid crontab." >&2
+fi
+
+# Keep the writable BusyBox spool synchronized with the read-only files from
+# the repository. This loop is independent of the installed crontab, so even a
+# broken schedule cannot disable future configuration updates.
+(
+    while :; do
+        sleep 30
+
+        if ! "$SYNC_SCRIPT"; then
+            echo "Cron config: synchronization failed; keeping the last valid crontab." >&2
+        fi
+    done
+) &
+
+exec crond -f -d 8

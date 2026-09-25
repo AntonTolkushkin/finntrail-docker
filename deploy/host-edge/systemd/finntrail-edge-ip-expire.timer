@@ -1,0 +1,12 @@
+[Unit]
+Description=Check temporary Finntrail UFW IP blocks every minute
+
+[Timer]
+OnBootSec=1min
+OnUnitActiveSec=1min
+AccuracySec=10s
+Persistent=true
+Unit=finntrail-edge-ip-expire.service
+
+[Install]
+WantedBy=timers.target

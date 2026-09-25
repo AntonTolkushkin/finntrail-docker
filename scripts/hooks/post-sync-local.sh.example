@@ -1,0 +1,11 @@
+#!/usr/bin/env sh
+set -eu
+
+# Copy this file to post-sync-local.sh (ignored by Git), make it executable and
+# add project-specific local sanitization. Available variables:
+#   FINNTRAIL_LOCAL_SITE_ROOT
+#   FINNTRAIL_LOCAL_SNAPSHOT_DIR
+#
+# Disable real SMTP, payment gateways, CRM/webhook tokens and other integrations
+# that must never be called from a developer workstation.
+echo "Add project-specific local integration sanitization here." >&2
